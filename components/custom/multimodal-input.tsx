@@ -21,13 +21,13 @@ import { Textarea } from "../ui/textarea";
 
 const suggestedActions = [
   {
-    title: "Help me book a flight",
+    title: "FLIGHTS MODE: Book a flight",
     label: "from San Francisco to London",
     action: "Help me book a flight from San Francisco to London",
   },
   {
-    title: "What is the status",
-    label: "of flight BA142 flying tmrw?",
+    title: "MARKETING MODE: Analyze website",
+    label: "provide url and wait for critique",
     action: "What is the status of flight BA142 flying tmrw?",
   },
 ];
@@ -153,10 +153,10 @@ export function MultimodalInput({
 
   return (
     <div className="relative w-full flex flex-col gap-4">
-{/*       {messages.length === 0 &&
+      {messages.length === 0 &&
         attachments.length === 0 &&
         uploadQueue.length === 0 && (
-          <div className="grid sm:grid-cols-2 gap-4 w-full md:px-0 mx-auto md:max-w-[500px]">
+          <div className="grid sm:grid-cols-2 gap-4 w-full md:px-0 mx-auto md:max-w-[800px]">
             {suggestedActions.map((suggestedAction, index) => (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -183,7 +183,7 @@ export function MultimodalInput({
               </motion.div>
             ))}
           </div>
-        )} */}
+        )}
 
       <input
         type="file"
