@@ -19,8 +19,11 @@ import {
 import { generateUUID } from "@/lib/utils";
 
 export async function POST(request: Request) {
-  const { id, messages }: { id: string; messages: Array<Message> } =
-    await request.json();
+  const { id, messages, systemPrompt }: { 
+    id: string; 
+    messages: Array<Message>;
+    systemPrompt?: string;
+  } = await request.json();
 
   const session = await auth();
 
@@ -34,7 +37,7 @@ export async function POST(request: Request) {
 
   const result = await streamText({
     model: geminiProModel,
-    system: `\n
+    system: systemPrompt || `\n
         - you help users book flights!
         - keep your responses limited to a sentence.
         - DO NOT output lists.
@@ -211,6 +214,37 @@ export async function POST(request: Request) {
         }),
         execute: async (boardingPass) => {
           return boardingPass;
+        },
+      },
+      analyzeURL: {
+        description: "Analyze the content of a webpage URL and provide insights",
+        parameters: z.object({
+          url: z.string().describe("The URL to analyze"),
+        }),
+        execute: async ({ url }) => {
+          try {
+            const response = await fetch(`https://r.jina.ai/${encodeURIComponent(url)}`);
+            
+            if (!response.ok) {
+              throw new Error('Failed to fetch URL content');
+            }
+
+            const content = await response.text();
+            
+            // Pass content to LLM but don't send it to client
+            return {
+              url,
+              status: 'success',
+              // The LLM will use this content for analysis but we don't need to expose it in the UI
+              _rawContent: content
+            };
+          } catch (error) {
+            return {
+              error: "Failed to analyze URL",
+              status: 'error',
+              details: error instanceof Error ? error.message : 'Unknown error'
+            };
+          }
         },
       },
     },

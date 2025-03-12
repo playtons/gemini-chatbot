@@ -2,14 +2,65 @@
 
 import { Attachment, Message } from "ai";
 import { useChat } from "ai/react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 
 import { Message as PreviewMessage } from "@/components/custom/message";
 import { useScrollToBottom } from "@/components/custom/use-scroll-to-bottom";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 import { MultimodalInput } from "./multimodal-input";
 import { Overview } from "./overview";
 
+const FLIGHTS_PROMPT = `
+        - you help users book flights!
+        - keep your responses limited to a sentence.
+        - DO NOT output lists.
+        - after every tool call, pretend you're showing the result to the user and keep your response limited to a phrase.
+        - today's date is ${new Date().toLocaleDateString()}.
+        - ask follow up questions to nudge user into the optimal flow
+        - ask for any details you don't know, like name of passenger, etc.'
+        - C and D are aisle seats, A and F are window seats, B and E are middle seats
+        - assume the most popular airports for the origin and destination
+        - here's the optimal flow
+          - search for flights
+          - choose flight
+          - select seats
+          - create reservation (ask user whether to proceed with payment or change reservation)
+          - authorize payment (requires user consent, wait for user to finish payment and let you know when done)
+          - display boarding pass (DO NOT display boarding pass without verifying payment)
+`;
+
+const MARKETING_PROMPT = `
+Act as my personal marketing marketing advisor with the following context:
+
+You have an IQ of 180.
+Brutally honest and direct in feedback.
+Built high-growth marketing strategies for major brands.
+Deep expertise in marketing psychology, strategy, and execution.
+Deeply invested in my success, intolerant of excuses.
+Focus on high-leverage marketing tactics for maximum ROI.
+Systems-thinking focusing on root causes, not surface-level fixes.
+
+Your marketing mission is to:
+Identify critical marketing gaps hindering growth.
+Design data-driven action plans to close those gaps.
+Push me beyond my marketing comfort zone.
+Call out marketing blind spots and rationalizations.
+Challenge me to think bigger and bolder in marketing strategy.
+Hold me accountable to high marketing standards and KPIs.
+Provide proven marketing frameworks and mental models.
+
+For each response:
+
+Start with the hard marketing truth I need to hear.
+Follow with specific, actionable marketing steps.
+End with a direct marketing challenge or assignment.
+
+Tool usage:
+- if user provides an URL for analysis, you can use analyzeURL tool
+`;
 export function Chat({
   id,
   initialMessages,
@@ -17,10 +68,12 @@ export function Chat({
   id: string;
   initialMessages: Array<Message>;
 }) {
+  const [systemPrompt, setSystemPrompt] = useState(FLIGHTS_PROMPT);
+  const [isMarketingMode, setIsMarketingMode] = useState(false);
   const { messages, handleSubmit, input, setInput, append, isLoading, stop } =
     useChat({
       id,
-      body: { id },
+      body: { id, systemPrompt },
       initialMessages,
       maxSteps: 10,
       onFinish: () => {
@@ -32,15 +85,61 @@ export function Chat({
     useScrollToBottom<HTMLDivElement>();
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
+  const [isPromptVisible, setIsPromptVisible] = useState(true);
+
+  const handlePromptToggle = (checked: boolean) => {
+    setIsMarketingMode(checked);
+    setSystemPrompt(checked ? MARKETING_PROMPT : FLIGHTS_PROMPT);
+  };
 
   return (
     <div className="flex flex-row justify-center pb-4 md:pb-8 h-dvh bg-background">
       <div className="flex flex-col justify-between items-center gap-4">
+        <div className="w-full md:max-w-[800px] px-4 md:px-0 pt-4 mt-16">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">System Prompt</p>
+              <button
+                onClick={() => setIsPromptVisible(!isPromptVisible)}
+                className="p-1 hover:bg-muted rounded-md transition-colors"
+                aria-label={isPromptVisible ? "Hide prompt" : "Show prompt"}
+              >
+                {isPromptVisible ? (
+                  <ChevronUp className="size-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="size-4 text-muted-foreground" />
+                )}
+              </button>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Label
+                htmlFor="prompt-mode"
+                className="text-sm text-muted-foreground"
+              >
+                {isMarketingMode ? "Marketing Mode" : "Flights Mode"}
+              </Label>
+              <Switch
+                id="prompt-mode"
+                checked={isMarketingMode}
+                onCheckedChange={handlePromptToggle}
+              />
+            </div>
+          </div>
+          {isPromptVisible && (
+            <textarea
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              placeholder="Enter system prompt here..."
+              className="w-full p-2 text-sm rounded-lg bg-muted/50 border border-zinc-200 dark:border-zinc-800 min-h-[200px] resize-none"
+            />
+          )}
+        </div>
+
         <div
           ref={messagesContainerRef}
           className="flex flex-col gap-4 h-full w-dvw items-center overflow-y-scroll"
         >
-          {messages.length === 0 && <Overview />}
+          {/*           {messages.length === 0 && <Overview />} */}
 
           {messages.map((message) => (
             <PreviewMessage
@@ -59,7 +158,7 @@ export function Chat({
           />
         </div>
 
-        <form className="flex flex-row gap-2 relative items-end w-full md:max-w-[500px] max-w-[calc(100dvw-32px) px-4 md:px-0">
+        <form className="flex flex-row gap-2 relative items-end w-full min-w-[400px] md:max-w-[800px] max-w-[calc(100dvw-32px) px-4 md:px-0">
           <MultimodalInput
             input={input}
             setInput={setInput}
