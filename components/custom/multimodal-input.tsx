@@ -28,7 +28,7 @@ const suggestedActions = [
   {
     title: "MARKETING MODE: Analyze website",
     label: "provide url and wait for critique",
-    action: "What is the status of flight BA142 flying tmrw?",
+    action: "Analyze this website: datworks.cloud",
   },
 ];
 
