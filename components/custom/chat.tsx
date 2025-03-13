@@ -69,6 +69,11 @@ TOOL_PLACEHOLDER
   * Assess the reliability of sources
   * Identify consensus views vs. minority positions
 
+- When using the advancedDeepResearch tool:
+  1. First, create a research plan with 3-5 specific sub-questions that will help answer the main query
+  2. Structure these questions to get complementary information from different angles
+  3. Pass these sub-questions as part of the researchPlan parameter
+
 - When presenting research, provide:
   1. A concise executive summary of key findings
   2. Main supporting evidence and data points
@@ -131,14 +136,16 @@ export function Chat({
         setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', '- You use the simpleDeepResearch tool'));
         break;
       case "advancedResearch":
-        setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', `- You use the advancedDeepResearch tool with maxSearches=${maxSearches}`));
+        setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', `- You use the advancedDeepResearch tool with maxSearches=${maxSearches}
+        - You create a research plan with specific sub-questions that will comprehensively answer the user's query`));
         break;
     }
   };
 
   useEffect(() => {
     if (mode === "advancedResearch") {
-      setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', `- You use the advancedDeepResearch tool with maxSearches=${maxSearches}`));
+      setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', `- You use the advancedDeepResearch tool with maxSearches=${maxSearches}
+      - You create a research plan with specific sub-questions that will comprehensively answer the user's query`));
     }
   }, [maxSearches, mode]);
 
