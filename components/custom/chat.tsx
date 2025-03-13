@@ -2,7 +2,7 @@
 
 import { Attachment, Message } from "ai";
 import { useChat } from "ai/react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Download } from "lucide-react";
 import { useState, useEffect } from "react";
 
 import { Message as PreviewMessage } from "@/components/custom/message";
@@ -95,6 +95,49 @@ TOOL_PLACEHOLDER
 Your goal is to provide thorough, accurate, and well-organized research to help users understand complex topics.
 `;
 
+const ADVISOR_PROMPT = `
+You are an expert business advisor for CEOs, designed to provide strategic insights and data-driven recommendations through a concise, structured conversation. Your goal is to quickly understand the business context, analyze available information, and deliver high-value strategic guidance.
+
+## Information Gathering Process
+
+1. **Business Context Assessment**: Begin by asking about the company's industry, business model, size, and growth stage. Prioritize understanding the CEO's immediate priorities and desired outcomes from this conversation.
+
+2. **Strategic Priorities Identification**: Determine the CEO's top 3 strategic priorities and their current risk tolerance level. Ask questions like: "What are your top 3 business priorities right now?" and "How would you describe your approach to risk in the current market environment?"
+
+3. **Performance & Metrics Focus**: Inquire about key performance indicators (KPIs) the CEO is focused on and any specific metrics they're concerned about. Ask: "Which metrics are most important to your business right now?" and "Are there specific performance areas you're looking to improve?"
+
+4. **External Data Integration**: If the CEO has attached company documents (like financial reports, earnings releases, strategic plans), acknowledge them and indicate you'll incorporate that information into your analysis. Example: "I see you've attached your quarterly earnings report. I'll reference this data in my responses."
+
+5. **Decision Support Structure**: Frame your responses as concise, actionable insights with clear reasoning. Structure complex recommendations as: a) Strategic options, b) Key considerations for each option, and c) Potential implementation steps.
+
+## Document Analysis Capabilities
+
+When financial reports or earnings releases are provided:
+- Identify and highlight key performance metrics relevant to the CEO's questions
+- Compare current performance to historical trends within the document
+- Extract relevant forward-looking statements and guidance
+- Connect document insights directly to the CEO's stated priorities
+- Identify potential risks or opportunities mentioned in the document that relate to the CEO's concerns
+
+## Response Guidelines
+
+- Keep responses concise and focused on delivering high-value insights
+- Use business language appropriate for C-level executives, avoiding unnecessary jargon
+- Present balanced perspectives that consider both short-term results and long-term strategy
+- When appropriate, structure key insights as numbered or bulleted points for clarity
+- Proactively connect insights to the CEO's stated priorities and concerns
+- Frame recommendations with clear reasoning that references relevant data
+- Ensure all advice is actionable, strategic, and directly relevant to the CEO's business context
+
+## Available Tools
+- performSearch: Perform a single-query search on the internet for client's market niche
+- analyzeURL: Analyze a URL and provide a summary of the content, if client provides a URL of his business or competitors
+- simpleDeepResearch: Perform a deep research on a topic
+- advancedDeepResearch: Perform a deep research on a topic with a research plan
+
+Maintain a professional, consultative tone throughout the conversation while being direct, insightful, and focused on providing decision support that a CEO would value.
+`;
+
 export function Chat({
   id,
   initialMessages,
@@ -102,7 +145,7 @@ export function Chat({
   id: string;
   initialMessages: Array<Message>;
 }) {
-  const [mode, setMode] = useState<"flights" | "marketing" | "simpleResearch" | "advancedResearch">("flights");
+  const [mode, setMode] = useState<"flights" | "marketing" | "simpleResearch" | "advancedResearch" | "advisor">("advisor");
   const [systemPrompt, setSystemPrompt] = useState(FLIGHTS_PROMPT);
   const [maxSearches, setMaxSearches] = useState<number>(5);
   const { messages, handleSubmit, input, setInput, append, isLoading, stop } =
@@ -122,7 +165,7 @@ export function Chat({
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const [isPromptVisible, setIsPromptVisible] = useState(true);
 
-  const handleModeChange = (newMode: "flights" | "marketing" | "simpleResearch" | "advancedResearch") => {
+  const handleModeChange = (newMode: "flights" | "marketing" | "simpleResearch" | "advancedResearch" | "advisor") => {
     setMode(newMode);
     
     switch (newMode) {
@@ -139,6 +182,9 @@ export function Chat({
         setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', `- You use the advancedDeepResearch tool with maxSearches=${maxSearches}
         - You create a research plan with specific sub-questions that will comprehensively answer the user's query`));
         break;
+      case "advisor":
+        setSystemPrompt(ADVISOR_PROMPT);
+        break;
     }
   };
 
@@ -148,6 +194,68 @@ export function Chat({
       - You create a research plan with specific sub-questions that will comprehensively answer the user's query`));
     }
   }, [maxSearches, mode]);
+
+  // Add the export function to convert chat to markdown
+  const exportChatToMarkdown = () => {
+    // Start with the system prompt
+    let markdown = `# Chat Export\n\n## System Prompt\n\n\`\`\`\n${systemPrompt}\n\`\`\`\n\n## Conversation\n\n`;
+    
+    // Add each message
+    messages.forEach(message => {
+      const role = message.role === 'user' ? 'User' : 'LLM';
+      markdown += `### ${role}:\n\n`;
+      
+      // Handle content (which could be string or array)
+      if (typeof message.content === 'string') {
+        markdown += `${message.content}\n\n`;
+      } else if (Array.isArray(message.content)) {
+        // Type assertion to fix "forEach on never" error
+        (message.content as Array<{ type: string; text?: string; image_url?: { url: string } }>).forEach(item => {
+          if (item.type === 'text') {
+            markdown += `${item.text}\n\n`;
+          } else if (item.type === 'image_url') {
+            markdown += `![Image](${item.image_url?.url})\n\n`;
+          }
+        });
+      }
+      
+      // Handle attachments
+      if (message.experimental_attachments && message.experimental_attachments.length > 0) {
+        markdown += `**Attachments:**\n\n`;
+        message.experimental_attachments.forEach(attachment => {
+          markdown += `- File: ${attachment.name}\n`;
+        });
+        markdown += `\n`;
+      }
+      
+      // Handle tool invocations with proper typing
+      if (message.toolInvocations && message.toolInvocations.length > 0) {
+        markdown += `**Tool Invocations:**\n\n`;
+        message.toolInvocations.forEach((tool: any) => {
+          // Using type assertion to fix TypeScript errors
+          markdown += `- Tool: ${tool.name || tool.id || "Unknown Tool"}\n`;
+          if (tool.input !== undefined) {
+            markdown += `  Input: \`\`\`json\n${JSON.stringify(tool.input, null, 2)}\n\`\`\`\n`;
+          }
+          if (tool.output) {
+            markdown += `  Output: \`\`\`json\n${JSON.stringify(tool.output, null, 2)}\n\`\`\`\n`;
+          }
+        });
+        markdown += `\n`;
+      }
+    });
+    
+    // Create and download the file
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chat-export-${id}-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="flex flex-row justify-center pb-4 md:pb-8 h-dvh bg-background">
@@ -169,6 +277,18 @@ export function Chat({
               </button>
             </div>
             <div className="flex items-center space-x-2">
+              {/* Add export button */}
+              {messages.length > 0 && (
+                <button
+                  onClick={exportChatToMarkdown}
+                  className="pr-12 p-1 hover:bg-muted rounded-md transition-colors flex items-center gap-1 text-sm text-muted-foreground"
+                  aria-label="Export chat"
+                  title="Export chat to Markdown"
+                >
+                  <Download className="size-4" />
+                  <span>Export chat to MD</span>
+                </button>
+              )}
               <Label
                 htmlFor="prompt-mode"
                 className="text-sm text-muted-foreground"
@@ -177,7 +297,7 @@ export function Chat({
               </Label>
               <Select
                 value={mode}
-                onValueChange={(value: "flights" | "marketing" | "simpleResearch" | "advancedResearch") => 
+                onValueChange={(value: "flights" | "marketing" | "simpleResearch" | "advancedResearch" | "advisor") => 
                   handleModeChange(value)
                 }
               >
@@ -189,6 +309,7 @@ export function Chat({
                   <SelectItem value="marketing">Marketing Mode</SelectItem>
                   <SelectItem value="simpleResearch">Simple Deep Research</SelectItem>
                   <SelectItem value="advancedResearch">Advanced Deep Research</SelectItem>
+                  <SelectItem value="advisor">Business Advisor</SelectItem>
                 </SelectContent>
               </Select>
             </div>
