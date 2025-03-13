@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Message as PreviewMessage } from "@/components/custom/message";
 import { useScrollToBottom } from "@/components/custom/use-scroll-to-bottom";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { MultimodalInput } from "./multimodal-input";
 import { Overview } from "./overview";
@@ -52,15 +52,39 @@ Challenge me to think bigger and bolder in marketing strategy.
 Hold me accountable to high marketing standards and KPIs.
 Provide proven marketing frameworks and mental models.
 
-For each response:
-
-Start with the hard marketing truth I need to hear.
-Follow with specific, actionable marketing steps.
-End with a direct marketing challenge or assignment.
-
 Tool usage:
-- if user provides an URL for analysis, you can use analyzeURL tool
+- if user provides an URL for analysis, use analyzeURL tool
+- if user asks for Deep Research, use simpleDeepResearch tool.
 `;
+
+const RESEARCH_PROMPT = `
+Act as my advanced research assistant with the following capabilities:
+
+- You excel at finding and analyzing information on any topic.
+- You can conduct deep research using the simpleDeepResearch tool.
+- You'll automatically use the simpleDeepResearch tool when a user asks about complex topics requiring in-depth information.
+- When looking for information, be rationally critical and try to cover different points of view. In analysis, you should 'However' or 'On the other side' with points opposite or different to main conclusion you can see.   
+- When presenting research, provide:
+  1. A concise summary of key findings
+  2. Important facts and data points
+  3. Different perspectives on the topic when relevant
+  4. Citations to sources used
+
+- When citing sources:
+  * Use numbered citations in square brackets (e.g., [1], [2]) within your text
+  * Include a "Sources" section at the end with the full URLs in a numbered list
+  * Example: "According to recent studies [1], the effect is significant..."
+  * Then end with: "Sources: 1. https://example.com 2. https://anothersite.com"
+
+- When a user asks for your opinion, clearly separate facts from your analysis.
+- When uncertain, acknowledge limitations and suggest additional research areas.
+- If a user provides URLs, analyze them with the analyzeURL tool.
+- Prioritize recent information when temporal relevance matters.
+- For follow-up questions, build on previously shared research context.
+
+Your goal is to provide thorough, accurate, and well-organized research to help users understand complex topics.
+`;
+
 export function Chat({
   id,
   initialMessages,
@@ -68,8 +92,8 @@ export function Chat({
   id: string;
   initialMessages: Array<Message>;
 }) {
+  const [mode, setMode] = useState<"flights" | "marketing" | "research">("flights");
   const [systemPrompt, setSystemPrompt] = useState(FLIGHTS_PROMPT);
-  const [isMarketingMode, setIsMarketingMode] = useState(false);
   const { messages, handleSubmit, input, setInput, append, isLoading, stop } =
     useChat({
       id,
@@ -87,9 +111,20 @@ export function Chat({
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const [isPromptVisible, setIsPromptVisible] = useState(true);
 
-  const handlePromptToggle = (checked: boolean) => {
-    setIsMarketingMode(checked);
-    setSystemPrompt(checked ? MARKETING_PROMPT : FLIGHTS_PROMPT);
+  const handleModeChange = (newMode: "flights" | "marketing" | "research") => {
+    setMode(newMode);
+    
+    switch (newMode) {
+      case "flights":
+        setSystemPrompt(FLIGHTS_PROMPT);
+        break;
+      case "marketing":
+        setSystemPrompt(MARKETING_PROMPT);
+        break;
+      case "research":
+        setSystemPrompt(RESEARCH_PROMPT);
+        break;
+    }
   };
 
   return (
@@ -116,13 +151,23 @@ export function Chat({
                 htmlFor="prompt-mode"
                 className="text-sm text-muted-foreground"
               >
-                {isMarketingMode ? "Marketing Mode" : "Flights Mode"}
+                AI Mode
               </Label>
-              <Switch
-                id="prompt-mode"
-                checked={isMarketingMode}
-                onCheckedChange={handlePromptToggle}
-              />
+              <Select
+                value={mode}
+                onValueChange={(value: "flights" | "marketing" | "research") => 
+                  handleModeChange(value)
+                }
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="flights">Flights Mode</SelectItem>
+                  <SelectItem value="marketing">Marketing Mode</SelectItem>
+                  <SelectItem value="research">Simple Deep Research</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           {isPromptVisible && (

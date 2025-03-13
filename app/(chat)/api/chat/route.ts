@@ -217,9 +217,9 @@ export async function POST(request: Request) {
         },
       },
       analyzeURL: {
-        description: "Analyze the content of a webpage URL and provide insights",
+        description: "Analyze the content of a webpage URL(s) and provide insights",
         parameters: z.object({
-          url: z.string().describe("The URL to analyze"),
+          url: z.string().describe("The URL(s) to analyze"),
         }),
         execute: async ({ url }) => {
           try {
@@ -241,6 +241,163 @@ export async function POST(request: Request) {
           } catch (error) {
             return {
               error: "Failed to analyze URL",
+              status: 'error',
+              details: error instanceof Error ? error.message : 'Unknown error'
+            };
+          }
+        },
+      },
+      performSearch: {
+        description: "Search the web for information using Tavily",
+        parameters: z.object({
+          query: z.string().describe("The search query"),
+          numResults: z.number().optional().describe("Number of results to return (default: 5)"),
+          category: z.string().optional().describe("Optional category for search (general, tech, finance, etc.)"),
+        }),
+        execute: async ({ query, numResults = 5, category = "general" }) => {
+          try {
+            const tavilyToken = process.env.TAVILY_TOKEN;
+            
+            if (!tavilyToken) {
+              throw new Error("Tavily API token not configured");
+            }
+            
+            const searchOptions = {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${tavilyToken}`, 
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                query,
+                topic: category,
+                search_depth: "basic",
+                max_results: numResults,
+                include_answer: false,
+                include_raw_content: false
+              })
+            };
+            
+            const response = await fetch('https://api.tavily.com/search', searchOptions);
+            
+            if (!response.ok) {
+              throw new Error(`Search request failed with status ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Format the results to be more useful for the AI
+            const formattedResults = {
+              query,
+              results: data.results?.slice(0, numResults).map((result: {
+                title: string;
+                url: string;
+                content: string;
+                score: number;
+              }) => ({
+                title: result.title,
+                url: result.url,
+                content: result.content,
+                score: result.score
+              })) || [],
+              responseTime: data.response_time
+            };
+            
+            return formattedResults;
+          } catch (error) {
+            console.error("Search error:", error);
+            return {
+              error: "Failed to perform search",
+              status: 'error',
+              details: error instanceof Error ? error.message : 'Unknown error'
+            };
+          }
+        },
+      },
+      simpleDeepResearch: {
+        description: "Perform deep research by searching and analyzing top results",
+        parameters: z.object({
+          query: z.string().describe("The research query"),
+          numResults: z.number().optional().describe("Number of search results to analyze (default: 3)"),
+        }),
+        execute: async ({ query, numResults = 3 }) => {
+          try {
+            const tavilyToken = process.env.TAVILY_TOKEN;
+            
+            if (!tavilyToken) {
+              throw new Error("Tavily API token not configured");
+            }
+            
+            // Step 1: Perform search with Tavily API
+            const searchOptions = {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${tavilyToken}`, 
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                query,
+                topic: "general",
+                search_depth: "advanced",
+                max_results: numResults * 2, // Get more results than needed
+                include_answer: true,
+                include_raw_content: true // Get full content for analysis
+              })
+            };
+            
+            const searchResponse = await fetch('https://api.tavily.com/search', searchOptions);
+            
+            if (!searchResponse.ok) {
+              throw new Error(`Search request failed with status ${searchResponse.status}`);
+            }
+            
+            const searchData = await searchResponse.json();
+            const searchResults = searchData.results || [];
+            
+            if (!searchResults.length) {
+              return {
+                query,
+                message: "No search results found",
+                searchResults: [],
+                analyzedResults: []
+              };
+            }
+            
+            // Step 2: Process the results
+            const urlsToAnalyze = searchResults.slice(0, numResults);
+            const analyzedResults = [];
+            
+            for (const result of urlsToAnalyze) {
+              // For Tavily, we'll use the content directly instead of fetching with r.jina.ai
+              analyzedResults.push({
+                title: result.title,
+                url: result.url,
+                searchSnippet: result.content,
+                status: 'success',
+                content: result.raw_content || result.content // Use raw_content if available, otherwise use snippet
+              });
+            }
+            
+            return {
+              query,
+              answer: searchData.answer, // Include Tavily's answer if available
+              message: `Deep research completed for "${query}" with ${analyzedResults.length} analyzed sources.`,
+              searchResults: searchResults.slice(0, numResults).map((result: {
+                title: string;
+                url: string;
+                content: string;
+              }) => ({
+                title: result.title,
+                url: result.url,
+                content: result.content
+              })),
+              analyzedResults
+            };
+            
+          } catch (error) {
+            console.error("Deep research error:", error);
+            return {
+              error: "Failed to perform deep research",
               status: 'error',
               details: error instanceof Error ? error.message : 'Unknown error'
             };

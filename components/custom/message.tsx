@@ -16,6 +16,15 @@ import { ListFlights } from "../flights/list-flights";
 import { SelectSeats } from "../flights/select-seats";
 import { VerifyPayment } from "../flights/verify-payment";
 
+// This new component will display during research/search operations
+const ResearchLoading = () => (
+  <div className="flex flex-col gap-2 p-4 border rounded-md bg-muted/20 animate-pulse w-full max-w-3xl">
+    <div className="h-4 bg-muted/50 rounded w-3/4"></div>
+    <div className="h-4 bg-muted/50 rounded w-1/2"></div>
+    <div className="text-sm text-muted-foreground mt-2">Researching and synthesizing information...</div>
+  </div>
+);
+
 export const Message = ({
   chatId,
   role,
@@ -29,6 +38,17 @@ export const Message = ({
   toolInvocations: Array<ToolInvocation> | undefined;
   attachments?: Array<Attachment>;
 }) => {
+  // Check if this is an empty research tool message that should be hidden
+  const isResearchToolOnly = toolInvocations?.length === 1 && 
+    ["analyzeURL", "performSearch", "simpleDeepResearch"].includes(toolInvocations[0]?.toolName) &&
+    toolInvocations[0]?.state === "result" && 
+    (!content || content === "");
+    
+  // Don't render anything if this is just an empty research message
+  if (isResearchToolOnly) {
+    return null;
+  }
+
   return (
     <motion.div
       className={`flex flex-row gap-4 px-4 w-full md:w-[800px] md:px-0 first-of-type:pt-20`}
@@ -74,8 +94,10 @@ export const Message = ({
                       <DisplayBoardingPass boardingPass={result} />
                     ) : toolName === "verifyPayment" ? (
                       <VerifyPayment result={result} />
-                    ) : toolName === "analyzeURL" ? (
-                      null
+                    ) : toolName === "analyzeURL" || 
+                       toolName === "performSearch" || 
+                       toolName === "simpleDeepResearch" ? (
+                      null // Don't render raw results for research tools
                     ) : (
                       <div>{JSON.stringify(result, null, 2)}</div>
                     )}
@@ -98,6 +120,10 @@ export const Message = ({
                       <AuthorizePayment />
                     ) : toolName === "displayBoardingPass" ? (
                       <DisplayBoardingPass />
+                    ) : toolName === "analyzeURL" || 
+                       toolName === "performSearch" || 
+                       toolName === "simpleDeepResearch" ? (
+                      <ResearchLoading />
                     ) : null}
                   </div>
                 );
