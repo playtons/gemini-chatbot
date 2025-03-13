@@ -3,7 +3,7 @@
 import { Attachment, Message } from "ai";
 import { useChat } from "ai/react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { Message as PreviewMessage } from "@/components/custom/message";
 import { useScrollToBottom } from "@/components/custom/use-scroll-to-bottom";
@@ -61,14 +61,20 @@ const RESEARCH_PROMPT = `
 Act as my advanced research assistant with the following capabilities:
 
 - You excel at finding and analyzing information on any topic.
-- You can conduct deep research using the simpleDeepResearch tool.
-- You'll automatically use the simpleDeepResearch tool when a user asks about complex topics requiring in-depth information.
-- When looking for information, be rationally critical and try to cover different points of view. In analysis, you should 'However' or 'On the other side' with points opposite or different to main conclusion you can see.   
+TOOL_PLACEHOLDER
+
+- When analyzing information:
+  * Be rationally critical and examine different viewpoints
+  * Consider counterarguments with phrases like "However" or "On the other hand"
+  * Assess the reliability of sources
+  * Identify consensus views vs. minority positions
+
 - When presenting research, provide:
-  1. A concise summary of key findings
-  2. Important facts and data points
-  3. Different perspectives on the topic when relevant
-  4. Citations to sources used
+  1. A concise executive summary of key findings
+  2. Main supporting evidence and data points
+  3. Different perspectives with fair representation
+  4. Limitations of the current research
+  5. Citations to sources using numbered references
 
 - When citing sources:
   * Use numbered citations in square brackets (e.g., [1], [2]) within your text
@@ -76,7 +82,6 @@ Act as my advanced research assistant with the following capabilities:
   * Example: "According to recent studies [1], the effect is significant..."
   * Then end with: "Sources: 1. https://example.com 2. https://anothersite.com"
 
-- When a user asks for your opinion, clearly separate facts from your analysis.
 - When uncertain, acknowledge limitations and suggest additional research areas.
 - If a user provides URLs, analyze them with the analyzeURL tool.
 - Prioritize recent information when temporal relevance matters.
@@ -92,8 +97,9 @@ export function Chat({
   id: string;
   initialMessages: Array<Message>;
 }) {
-  const [mode, setMode] = useState<"flights" | "marketing" | "research">("flights");
+  const [mode, setMode] = useState<"flights" | "marketing" | "simpleResearch" | "advancedResearch">("flights");
   const [systemPrompt, setSystemPrompt] = useState(FLIGHTS_PROMPT);
+  const [maxSearches, setMaxSearches] = useState<number>(5);
   const { messages, handleSubmit, input, setInput, append, isLoading, stop } =
     useChat({
       id,
@@ -111,7 +117,7 @@ export function Chat({
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const [isPromptVisible, setIsPromptVisible] = useState(true);
 
-  const handleModeChange = (newMode: "flights" | "marketing" | "research") => {
+  const handleModeChange = (newMode: "flights" | "marketing" | "simpleResearch" | "advancedResearch") => {
     setMode(newMode);
     
     switch (newMode) {
@@ -121,11 +127,20 @@ export function Chat({
       case "marketing":
         setSystemPrompt(MARKETING_PROMPT);
         break;
-      case "research":
-        setSystemPrompt(RESEARCH_PROMPT);
+      case "simpleResearch":
+        setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', '- You use the simpleDeepResearch tool'));
+        break;
+      case "advancedResearch":
+        setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', `- You use the advancedDeepResearch tool with maxSearches=${maxSearches}`));
         break;
     }
   };
+
+  useEffect(() => {
+    if (mode === "advancedResearch") {
+      setSystemPrompt(RESEARCH_PROMPT.replace('TOOL_PLACEHOLDER', `- You use the advancedDeepResearch tool with maxSearches=${maxSearches}`));
+    }
+  }, [maxSearches, mode]);
 
   return (
     <div className="flex flex-row justify-center pb-4 md:pb-8 h-dvh bg-background">
@@ -155,7 +170,7 @@ export function Chat({
               </Label>
               <Select
                 value={mode}
-                onValueChange={(value: "flights" | "marketing" | "research") => 
+                onValueChange={(value: "flights" | "marketing" | "simpleResearch" | "advancedResearch") => 
                   handleModeChange(value)
                 }
               >
@@ -165,11 +180,36 @@ export function Chat({
                 <SelectContent>
                   <SelectItem value="flights">Flights Mode</SelectItem>
                   <SelectItem value="marketing">Marketing Mode</SelectItem>
-                  <SelectItem value="research">Simple Deep Research</SelectItem>
+                  <SelectItem value="simpleResearch">Simple Deep Research</SelectItem>
+                  <SelectItem value="advancedResearch">Advanced Deep Research</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+          
+          {mode === "advancedResearch" && (
+            <div className="flex items-center justify-end space-x-2 my-2 pr-8">
+              <Label
+                htmlFor="max-searches"
+                className="text-sm text-muted-foreground"
+              >
+                Max Searches
+              </Label>
+              <input
+                id="max-searches"
+                type="number"
+                min="1"
+                max="10"
+                value={maxSearches}
+                onChange={(e) => setMaxSearches(Number(e.target.value))}
+                className="w-20 p-2 text-sm rounded-lg bg-muted/50 border border-zinc-200 dark:border-zinc-800"
+              />
+              <span className="text-xs text-muted-foreground">
+                (1-10)
+              </span>
+            </div>
+          )}
+          
           {isPromptVisible && (
             <textarea
               value={systemPrompt}

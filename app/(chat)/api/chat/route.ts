@@ -321,6 +321,7 @@ export async function POST(request: Request) {
           numResults: z.number().optional().describe("Number of search results to analyze (default: 3)"),
         }),
         execute: async ({ query, numResults = 3 }) => {
+          console.log(`[TOOL USAGE] simpleDeepResearch called with query: "${query}"`);
           try {
             const tavilyToken = process.env.TAVILY_TOKEN;
             
@@ -398,6 +399,152 @@ export async function POST(request: Request) {
             console.error("Deep research error:", error);
             return {
               error: "Failed to perform deep research",
+              status: 'error',
+              details: error instanceof Error ? error.message : 'Unknown error'
+            };
+          }
+        },
+      },
+      advancedDeepResearch: {
+        description: "Perform multi-step deep research by planning, executing multiple searches, and synthesizing findings",
+        parameters: z.object({
+          query: z.string().describe("The main research question"),
+          maxSearches: z.number().optional().describe("Maximum number of search queries to perform (default: 5)"),
+          includeDetails: z.boolean().optional().describe("Whether to include detailed research process in output (default: false)"),
+        }),
+        execute: async ({ query, maxSearches = 5, includeDetails = false }) => {
+          console.log(`[TOOL USAGE] advancedDeepResearch called with query: "${query}", maxSearches: ${maxSearches}`);
+          try {
+            const tavilyToken = process.env.TAVILY_TOKEN;
+            
+            if (!tavilyToken) {
+              throw new Error("Tavily API token not configured");
+            }
+            
+            // Step 1: Plan the research approach
+            const planOptions = {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${tavilyToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                query: `Create a research plan for investigating: "${query}"`,
+                search_depth: "basic",
+                max_results: 3
+              })
+            };
+            
+            const planResponse = await fetch('https://api.tavily.com/search', planOptions);
+            if (!planResponse.ok) {
+              throw new Error(`Planning request failed with status ${planResponse.status}`);
+            }
+            
+            const planData = await planResponse.json();
+            
+            // Extract research questions from the answer
+            let subQuestions = [];
+            if (planData.answer) {
+              // Use regex to extract questions or steps from the answer
+              const questionMatches = planData.answer.match(/\d+\.\s+([^.?!]+\?)/g) || [];
+              subQuestions = questionMatches.map((q: string) => q.replace(/^\d+\.\s+/, '').trim());
+              
+              // If no questions were found, try to split by numbered points
+              if (subQuestions.length === 0) {
+                const points = planData.answer.split(/\d+\.\s+/).filter(Boolean);
+                subQuestions = points.slice(0, Math.min(4, points.length));
+              }
+              
+              // If still empty or too few, generate some basic questions
+              if (subQuestions.length < 2) {
+                subQuestions = [
+                  `What are the key facts about ${query}?`,
+                  `What are different perspectives on ${query}?`,
+                  `What is the latest research on ${query}?`,
+                  `What are the implications of ${query}?`
+                ];
+              }
+            } else {
+              // Fallback questions if planning fails
+              subQuestions = [
+                `What are the key facts about ${query}?`,
+                `What are different perspectives on ${query}?`,
+                `What is the latest research on ${query}?`,
+                `What are the implications of ${query}?`
+              ];
+            }
+            
+            // Limit to maxSearches - 1 (we already used one for planning)
+            subQuestions = subQuestions.slice(0, maxSearches - 1);
+            
+            // Step 2: Execute searches for each sub-question
+            const researchResults = [];
+            const allSearchResults = [];
+            
+            for (const question of subQuestions) {
+              const searchOptions = {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${tavilyToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  query: question,
+                  search_depth: "advanced",
+                  max_results: 3,
+                  include_answer: true,
+                  include_raw_content: true
+                })
+              };
+              
+              const searchResponse = await fetch('https://api.tavily.com/search', searchOptions);
+              if (!searchResponse.ok) {
+                continue; // Skip this question if search fails
+              }
+              
+              const searchData = await searchResponse.json();
+              
+              researchResults.push({
+                question,
+                answer: searchData.answer,
+                sources: searchData.results?.slice(0, 3).map((result: { 
+                  title: string;
+                  url: string;
+                  content: string;
+                }) => ({
+                  title: result.title,
+                  url: result.url,
+                  content: result.content
+                })) || []
+              });
+              
+              // Add to full results collection
+              if (searchData.results) {
+                allSearchResults.push(...searchData.results.slice(0, 3));
+              }
+            }
+            
+            // Step 3: Compile and return results
+            return {
+              query,
+              plan: planData.answer || `Research plan for: ${query}`,
+              researchQuestions: subQuestions,
+              findings: researchResults,
+              // Only include detailed results if requested
+              allSources: includeDetails ? allSearchResults.map(result => ({
+                title: result.title,
+                url: result.url,
+                content: result.content,
+                fullContent: includeDetails ? (result.raw_content || null) : null
+              })) : undefined,
+              queriesUsed: subQuestions.length + 1, // +1 for the initial planning query
+              message: `Completed ${subQuestions.length + 1} research queries on "${query}"`
+            };
+            
+          } catch (error) {
+            console.error("Advanced research error:", error);
+            return {
+              error: "Failed to perform advanced research",
               status: 'error',
               details: error instanceof Error ? error.message : 'Unknown error'
             };

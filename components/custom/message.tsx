@@ -40,7 +40,7 @@ export const Message = ({
 }) => {
   // Check if this is an empty research tool message that should be hidden
   const isResearchToolOnly = toolInvocations?.length === 1 && 
-    ["analyzeURL", "performSearch", "simpleDeepResearch"].includes(toolInvocations[0]?.toolName) &&
+    ["analyzeURL", "performSearch", "simpleDeepResearch", "advancedDeepResearch"].includes(toolInvocations[0]?.toolName) &&
     toolInvocations[0]?.state === "result" && 
     (!content || content === "");
     
@@ -96,7 +96,8 @@ export const Message = ({
                       <VerifyPayment result={result} />
                     ) : toolName === "analyzeURL" || 
                        toolName === "performSearch" || 
-                       toolName === "simpleDeepResearch" ? (
+                       toolName === "simpleDeepResearch" ||
+                       toolName === "advancedDeepResearch" ? (
                       null // Don't render raw results for research tools
                     ) : (
                       <div>{JSON.stringify(result, null, 2)}</div>
@@ -122,7 +123,8 @@ export const Message = ({
                       <DisplayBoardingPass />
                     ) : toolName === "analyzeURL" || 
                        toolName === "performSearch" || 
-                       toolName === "simpleDeepResearch" ? (
+                       toolName === "simpleDeepResearch" ||
+                       toolName === "advancedDeepResearch" ? (
                       <ResearchLoading />
                     ) : null}
                   </div>
