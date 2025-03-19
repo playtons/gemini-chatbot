@@ -17,7 +17,8 @@ bun run dev
 ```
 5. look at [localhost:3000](http://localhost:3000/) for local website
 6. change server LLM behavior (tool calling) at app\(chat)\api\chat\route.ts
-7. change client chat behavior (prompts, UI) at components\custom\chat.tsx
+7. change hardcoded prompts at lib\prompts\index.ts
+8. change client chat behavior (UI) at components\custom\chat.tsx
 
 ## Deployment
 
