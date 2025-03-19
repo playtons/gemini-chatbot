@@ -136,3 +136,8 @@ export function getTitleFromChat(chat: Chat) {
 
   return firstMessage.content;
 }
+
+// A helper function for formatted date
+export function getFormattedDate() {
+  return new Date().toLocaleDateString();
+}
