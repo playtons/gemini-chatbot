@@ -318,87 +318,71 @@ export async function POST(request: Request) {
         description: "Perform deep research by searching and analyzing top results",
         parameters: z.object({
           query: z.string().describe("The research query"),
-          numResults: z.number().optional().describe("Number of search results to analyze (default: 3)"),
+          depth: z.string().optional().describe("Depth of search (default: basic)"),
         }),
-        execute: async ({ query, numResults = 3 }) => {
-          console.log(`[TOOL USAGE] simpleDeepResearch called with query: "${query}"`);
+        execute: async ({ query, depth = "basic" }) => {
+          console.log(`[TOOL START] simpleDeepResearch initiated with query: "${query}"`);
+          console.log(`[TOOL CONFIG] depth: ${depth}`);
+          
           try {
             const tavilyToken = process.env.TAVILY_TOKEN;
             
             if (!tavilyToken) {
+              console.error(`[TOOL ERROR] Tavily API token not configured`);
               throw new Error("Tavily API token not configured");
             }
             
-            // Step 1: Perform search with Tavily API
+            console.log(`[SEARCH] Sending request to Tavily API...`);
             const searchOptions = {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${tavilyToken}`, 
+                'Authorization': `Bearer ${tavilyToken}`,
                 'Content-Type': 'application/json'
               },
               body: JSON.stringify({
-                query,
-                topic: "general",
-                search_depth: "advanced",
-                max_results: numResults * 2, // Get more results than needed
+                query: query,
+                search_depth: depth,
+                max_results: 10,
                 include_answer: true,
-                include_raw_content: true // Get full content for analysis
+                include_raw_content: false
               })
             };
             
             const searchResponse = await fetch('https://api.tavily.com/search', searchOptions);
             
             if (!searchResponse.ok) {
+              console.error(`[SEARCH] Failed with status ${searchResponse.status}: ${searchResponse.statusText}`);
               throw new Error(`Search request failed with status ${searchResponse.status}`);
             }
             
+            console.log(`[SEARCH] Received response from Tavily API`);
             const searchData = await searchResponse.json();
-            const searchResults = searchData.results || [];
+            console.log(`[SEARCH] Got ${searchData.results?.length || 0} results`);
             
-            if (!searchResults.length) {
-              return {
-                query,
-                message: "No search results found",
-                searchResults: [],
-                analyzedResults: []
-              };
-            }
+            // Process the results
+            const sources = (searchData.results || []).map((result: {
+              title: string;
+              url: string;
+              content: string;
+            }) => ({
+              title: result.title,
+              url: result.url,
+              content: result.content,
+            }));
             
-            // Step 2: Process the results
-            const urlsToAnalyze = searchResults.slice(0, numResults);
-            const analyzedResults = [];
-            
-            for (const result of urlsToAnalyze) {
-              // For Tavily, we'll use the content directly instead of fetching with r.jina.ai
-              analyzedResults.push({
-                title: result.title,
-                url: result.url,
-                searchSnippet: result.content,
-                status: 'success',
-                content: result.raw_content || result.content // Use raw_content if available, otherwise use snippet
-              });
-            }
-            
+            console.log(`[TOOL COMPLETE] simpleDeepResearch finished successfully`);
             return {
-              query,
-              answer: searchData.answer, // Include Tavily's answer if available
-              message: `Deep research completed for "${query}" with ${analyzedResults.length} analyzed sources.`,
-              searchResults: searchResults.slice(0, numResults).map((result: {
-                title: string;
-                url: string;
-                content: string;
-              }) => ({
-                title: result.title,
-                url: result.url,
-                content: result.content
-              })),
-              analyzedResults
+              answer: searchData.answer,
+              sources: sources,
+              message: `Research completed for: "${query}"`,
+              query: query
             };
             
           } catch (error) {
-            console.error("Deep research error:", error);
+            console.error(`[TOOL ERROR] Simple research error:`, error);
+            console.error(`[TOOL ERROR] Stack trace:`, error instanceof Error ? error.stack : 'No stack trace');
             return {
-              error: "Failed to perform deep research",
+              error: "Failed to perform research",
               status: 'error',
               details: error instanceof Error ? error.message : 'Unknown error'
             };
@@ -417,22 +401,31 @@ export async function POST(request: Request) {
           includeDetails: z.boolean().optional().describe("Whether to include detailed research process in output (default: false)"),
         }),
         execute: async ({ query, researchPlan, maxSearches = 5, includeDetails = false }) => {
-          console.log(`[TOOL USAGE] advancedDeepResearch called with query: "${query}", maxSearches: ${maxSearches}`);
+          console.log(`[TOOL START] advancedDeepResearch initiated with query: "${query}"`);
+          console.log(`[TOOL CONFIG] maxSearches: ${maxSearches}, includeDetails: ${includeDetails}`);
+          console.log(`[RESEARCH PLAN] Sub-questions: ${JSON.stringify(researchPlan.subQuestions)}`);
+          if (researchPlan.rationale) console.log(`[RESEARCH PLAN] Rationale: ${researchPlan.rationale}`);
+          
           try {
             const tavilyToken = process.env.TAVILY_TOKEN;
             
             if (!tavilyToken) {
+              console.error(`[TOOL ERROR] Tavily API token not configured`);
               throw new Error("Tavily API token not configured");
             }
             
             // Get sub-questions from the research plan provided by the LLM
             const subQuestions = researchPlan.subQuestions.slice(0, maxSearches);
+            console.log(`[RESEARCH] Will process ${subQuestions.length} sub-questions`);
             
             // Execute searches for each sub-question
             const researchResults = [];
             const allSearchResults = [];
             
-            for (const question of subQuestions) {
+            for (let i = 0; i < subQuestions.length; i++) {
+              const question = subQuestions[i];
+              console.log(`[SEARCH ${i+1}/${subQuestions.length}] Querying: "${question}"`);
+              
               const searchOptions = {
                 method: 'POST',
                 headers: {
@@ -448,12 +441,17 @@ export async function POST(request: Request) {
                 })
               };
               
+              console.log(`[SEARCH ${i+1}] Sending request to Tavily API...`);
               const searchResponse = await fetch('https://api.tavily.com/search', searchOptions);
+              
               if (!searchResponse.ok) {
+                console.error(`[SEARCH ${i+1}] Failed with status ${searchResponse.status}: ${searchResponse.statusText}`);
                 continue; // Skip this question if search fails
               }
               
+              console.log(`[SEARCH ${i+1}] Received response from Tavily API`);
               const searchData = await searchResponse.json();
+              console.log(`[SEARCH ${i+1}] Got ${searchData.results?.length || 0} results`);
               
               researchResults.push({
                 question,
@@ -475,8 +473,11 @@ export async function POST(request: Request) {
               }
             }
             
+            console.log(`[RESEARCH] Completed all searches. Compiling results...`);
+            console.log(`[RESEARCH] Total sources gathered: ${allSearchResults.length}`);
+            
             // Compile and return results
-            return {
+            const result = {
               query,
               plan: {
                 subQuestions,
@@ -484,7 +485,12 @@ export async function POST(request: Request) {
               },
               findings: researchResults,
               // Only include detailed results if requested
-              allSources: includeDetails ? allSearchResults.map(result => ({
+              allSources: includeDetails ? allSearchResults.map((result: {
+                title: string;
+                url: string;
+                content: string;
+                raw_content?: string;
+              }) => ({
                 title: result.title,
                 url: result.url,
                 content: result.content,
@@ -494,8 +500,12 @@ export async function POST(request: Request) {
               message: `Completed ${subQuestions.length} research queries on "${query}"`
             };
             
+            console.log(`[TOOL COMPLETE] advancedDeepResearch finished successfully`);
+            return result;
+            
           } catch (error) {
-            console.error("Advanced research error:", error);
+            console.error(`[TOOL ERROR] Advanced research error:`, error);
+            console.error(`[TOOL ERROR] Stack trace:`, error instanceof Error ? error.stack : 'No stack trace');
             return {
               error: "Failed to perform advanced research",
               status: 'error',
